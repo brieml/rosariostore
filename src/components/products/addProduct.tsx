@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+import * as XLSX from 'xlsx'; // <--- Importamos xlsx
 
 interface Product {
   codigo: string;
@@ -25,6 +26,8 @@ const AddProduct: React.FC = () => {
     precioVenta: 0,
     proveedor: '',
   });
+
+  const [isUploading, setIsUploading] = useState(false); // Estado para manejar la carga
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -57,10 +60,80 @@ const AddProduct: React.FC = () => {
     }
   };
 
+  // --- NUEVA FUNCIÓN: Manejar la carga del archivo Excel ---
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true); // Activar estado de carga
+    try {
+      const data = await file.arrayBuffer(); // Leer el archivo como ArrayBuffer
+      const workbook = XLSX.read(data, { type: 'array' }); // Parsear el archivo
+      const firstSheetName = workbook.SheetNames[0]; // Obtener la primera hoja
+      const worksheet = workbook.Sheets[firstSheetName]; // Obtener los datos de la hoja
+      const jsonData = XLSX.utils.sheet_to_json(worksheet); // Convertir a JSON
+
+      // Mapear los datos del Excel a la estructura de Product
+      // Ajusta estos nombres de clave según como se llamen exactamente en tu Excel
+      const productsToUpload: Product[] = jsonData.map((row: any) => ({
+        codigo: String(row['CODIGO'] || row['codigo'] || row['Código'] || row['Id'] || ''),
+        descripcion: String(row['DESCRIPCION DEL PRODUCTO'] || row['descripcion'] || row['Descripción'] || row['Nombre'] || ''),
+        unidadMedida: String(row['UNIDAD DE MEDIDA'] || row['unidadMedida'] || row['Unidad'] || '1'),
+        precioUnitario: parseFloat(row['PRECIO UNITARIO'] || row['precioUnitario'] || 0) || 0,
+        iva: String(row['IVA'] || row['iva'] || '0%'),
+        precioConIva: parseFloat(row['PRECIO UNITARIO + IVA'] || row['precioConIva'] || 0) || 0,
+        precioVenta: parseFloat(row['PRECIO DE VENTA'] || row['precioVenta'] || 0) || 0,
+        proveedor: String(row['PROVEEDOR'] || row['proveedor'] || row['Proveedor'] || ''),
+      }));
+
+      // Subir cada producto a Firestore
+      let successCount = 0;
+      let errorCount = 0;
+      for (const product of productsToUpload) {
+        try {
+          await addDoc(collection(db, "products"), product);
+          successCount++;
+        } catch (uploadError) {
+          console.error("Error al subir un producto:", product, uploadError);
+          errorCount++;
+        }
+      }
+
+      alert(`Carga completada: ${successCount} productos agregados, ${errorCount} errores.`);
+
+    } catch (error) {
+      console.error("Error al leer el archivo Excel o subir a Firebase: ", error);
+      alert('Ocurrió un error al procesar el archivo Excel o al subir los datos.');
+    } finally {
+      setIsUploading(false); // Desactivar estado de carga
+      e.target.value = ''; // Limpiar el input de archivo
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto bg-white shadow-lg rounded-lg p-6">
         <h1 className="text-2xl font-bold text-center text-indigo-700 mb-6">Rosario Store - Agregar Producto</h1>
+
+        {/* Nuevo: Botón para subir archivo Excel */}
+        <div className="mb-6 p-4 bg-gray-100 rounded-md">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Cargar productos desde Excel</label>
+          <input
+            type="file"
+            accept=".xlsx, .xls" // Aceptar solo archivos Excel
+            onChange={handleFileUpload}
+            disabled={isUploading} // Deshabilitar mientras se carga
+            className="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-indigo-50 file:text-indigo-700
+                      hover:file:bg-indigo-100"
+          />
+          {isUploading && <p className="text-xs text-indigo-600 mt-1">Cargando y subiendo productos...</p>}
+        </div>
+
+        <hr className="my-6" />
 
         <form onSubmit={handleCreateProduct} className="space-y-5">
           {/* Código */}
