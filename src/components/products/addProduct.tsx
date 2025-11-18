@@ -29,7 +29,7 @@ const AddProduct: React.FC = () => {
 
   const [isUploading, setIsUploading] = useState(false); // Estado para manejar la carga
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setNewProduct((prev) => ({
       ...prev,
@@ -145,34 +145,35 @@ const AddProduct: React.FC = () => {
               value={newProduct.codigo}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: 1"
+              placeholder=""
             />
           </div>
 
           {/* Descripción */}
+               {/* Descripción */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Descripción del Producto</label>
-            <input
-              type="text"
+            <textarea
               name="descripcion"
               value={newProduct.descripcion}
               onChange={handleChange}
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: DET 3D *250 PC*24"
+              placeholder=""
+              rows={4} // Puedes ajustar la cantidad de filas según necesites
             />
           </div>
 
           {/* Unidad de Medida */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Unidad de Medida</label>
+            <label className="block text-sm font-medium text-gray-700">UM</label>
             <input
               type="text"
               name="unidadMedida"
               value={newProduct.unidadMedida}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: 1"
+              placeholder=""
             />
           </div>
 
@@ -186,24 +187,10 @@ const AddProduct: React.FC = () => {
               onChange={handleChange}
               step="0.01"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: 2003"
+              placeholder=""
             />
           </div>
 
-          {/* IVA */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">IVA</label>
-            <select
-              name="iva"
-              value={newProduct.iva}
-              onChange={handleChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            >
-              <option value="0%">0%</option>
-              <option value="5%">5%</option>
-              <option value="19%">19%</option>
-            </select>
-          </div>
 
           {/* Precio con IVA */}
           <div>
@@ -215,7 +202,7 @@ const AddProduct: React.FC = () => {
               onChange={handleChange}
               step="0.01"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: 2383.57"
+              placeholder=""
             />
           </div>
 
@@ -229,7 +216,7 @@ const AddProduct: React.FC = () => {
               onChange={handleChange}
               step="0.01"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: 3000"
+              placeholder=""
             />
           </div>
 
@@ -242,7 +229,7 @@ const AddProduct: React.FC = () => {
               value={newProduct.proveedor}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Ej: NARE"
+              placeholder=""
             />
           </div>
 

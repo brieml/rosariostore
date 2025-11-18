@@ -1,7 +1,8 @@
 // src/components/ViewProducts.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // <-- Importamos Storage
 
 interface Product {
   id: string;
@@ -9,7 +10,6 @@ interface Product {
   descripcion: string;
   unidadMedida: string;
   precioUnitario: number;
-  iva: string;
   precioConIva: number;
   precioVenta: number;
   proveedor: string;
@@ -23,6 +23,12 @@ const ViewProducts: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempProduct, setTempProduct] = useState<Partial<Product>>({});
   const [flippedCardId, setFlippedCardId] = useState<string | null>(null);
+  const [uploadingImageId, setUploadingImageId] = useState<string | null>(null); // Nuevo estado para saber qué producto está subiendo imagen
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const storage = getStorage(); // <-- Inicializamos Storage
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -72,17 +78,19 @@ const ViewProducts: React.FC = () => {
     if (!tempProduct.descripcion || !tempProduct.codigo) return;
 
     try {
-      const productRef = doc(db, "products", id);
-      await updateDoc(productRef, {
+      const updatedProduct = {
         ...tempProduct,
         precioUnitario: parseFloat(tempProduct.precioUnitario as any) || 0,
         precioConIva: parseFloat(tempProduct.precioConIva as any) || 0,
         precioVenta: parseFloat(tempProduct.precioVenta as any) || 0,
-      });
+      };
+
+      const productRef = doc(db, "products", id);
+      await updateDoc(productRef, updatedProduct);
 
       setProducts(
         products.map((p) =>
-          p.id === id ? ({ ...p, ...tempProduct } as Product) : p
+          p.id === id ? ({ ...p, ...updatedProduct } as Product) : p
         )
       );
       setEditingId(null);
@@ -98,6 +106,69 @@ const ViewProducts: React.FC = () => {
   ) => {
     const { name, value } = e.target;
     setTempProduct((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // --- NUEVA FUNCIÓN: Tomar foto y subir al producto ---
+  const takePhotoAndUpdateImage = async (productId: string) => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    setUploadingImageId(productId); // Marcar que este producto está subiendo imagen
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoRef.current.srcObject = stream;
+
+      videoRef.current.play();
+      setTimeout(() => {
+        const video = videoRef.current!;
+        const canvas = canvasRef.current!;
+        const context = canvas.getContext("2d")!;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(
+          async (blob) => {
+            if (!blob) return;
+
+            try {
+              const fileName = `${Date.now()}_${productId}.jpg`;
+              const storageRef = ref(storage, `product-images/${fileName}`);
+
+              const snapshot = await uploadBytes(storageRef, blob);
+              const downloadUrl = await getDownloadURL(snapshot.ref);
+
+              // Actualizar el producto en Firestore
+              const productRef = doc(db, "products", productId);
+              await updateDoc(productRef, { imagenUrl: downloadUrl });
+
+              // Actualizar estado local
+              setProducts(
+                products.map((p) =>
+                  p.id === productId ? { ...p, imagenUrl: downloadUrl } : p
+                )
+              );
+
+              alert("Imagen actualizada con éxito!");
+            } catch (uploadError) {
+              console.error("Error al subir la imagen:", uploadError);
+              alert("Error al subir la imagen.");
+            } finally {
+              stream.getTracks().forEach((track) => track.stop()); // Detener la cámara
+              setUploadingImageId(null); // Quitar marca de subida
+            }
+          },
+          "image/jpeg",
+          0.8
+        );
+      }, 500);
+    } catch (err) {
+      console.error("Error al acceder a la cámara:", err);
+      alert("No se pudo acceder a la cámara. Por favor, permite el acceso.");
+      setUploadingImageId(null);
+    }
   };
 
   if (loading) {
@@ -141,7 +212,9 @@ const ViewProducts: React.FC = () => {
                 <div
                   key={product.id}
                   onClick={() => !isEditing && handleCardClick(product.id)}
-                  className={`relative ${isEditing ? "cursor-default" : "cursor-pointer h-64"}`}
+                  className={`relative ${
+                    isEditing ? "cursor-default" : "cursor-pointer h-64"
+                  }`}
                   style={!isEditing ? { perspective: "1000px" } : {}}
                 >
                   {isEditing ? (
@@ -182,36 +255,29 @@ const ViewProducts: React.FC = () => {
                           <input
                             type="text"
                             name="unidadMedida"
-                            value={tempProduct.unidadMedida ?? product.unidadMedida}
+                            value={
+                              tempProduct.unidadMedida ?? product.unidadMedida
+                            }
                             onChange={handleInputChange}
                             className="text-gray-800 bg-gray-100 border border-gray-300 rounded px-2 py-1 w-full mt-1"
                           />
                         </div>
                         <div>
                           <dt className="font-medium text-gray-500">
-                            Precio Unitario
+                            Costo Unitario
                           </dt>
                           <input
                             type="number"
                             name="precioUnitario"
-                            value={tempProduct.precioUnitario ?? product.precioUnitario}
+                            value={
+                              tempProduct.precioUnitario ??
+                              product.precioUnitario
+                            }
                             onChange={handleInputChange}
                             className="text-gray-800 bg-gray-100 border border-gray-300 rounded px-2 py-1 w-full mt-1"
                           />
                         </div>
-                        <div>
-                          <dt className="font-medium text-gray-500">IVA</dt>
-                          <select
-                            name="iva"
-                            value={tempProduct.iva ?? product.iva}
-                            onChange={handleInputChange}
-                            className="text-gray-800 bg-gray-100 border border-gray-300 rounded px-2 py-1 w-full mt-1"
-                          >
-                            <option value="0%">0%</option>
-                            <option value="5%">5%</option>
-                            <option value="19%">19%</option>
-                          </select>
-                        </div>
+
                         <div>
                           <dt className="font-medium text-gray-500">
                             Precio + IVA
@@ -219,7 +285,9 @@ const ViewProducts: React.FC = () => {
                           <input
                             type="number"
                             name="precioConIva"
-                            value={tempProduct.precioConIva ?? product.precioConIva}
+                            value={
+                              tempProduct.precioConIva ?? product.precioConIva
+                            }
                             onChange={handleInputChange}
                             className="text-gray-800 bg-gray-100 border border-gray-300 rounded px-2 py-1 w-full mt-1"
                           />
@@ -231,7 +299,9 @@ const ViewProducts: React.FC = () => {
                           <input
                             type="number"
                             name="precioVenta"
-                            value={tempProduct.precioVenta ?? product.precioVenta}
+                            value={
+                              tempProduct.precioVenta ?? product.precioVenta
+                            }
                             onChange={handleInputChange}
                             className="text-xl font-bold text-green-600 bg-gray-100 border border-gray-300 rounded px-2 py-1 w-full mt-1"
                           />
@@ -265,7 +335,9 @@ const ViewProducts: React.FC = () => {
                       className="relative w-full h-full transition-transform duration-500"
                       style={{
                         transformStyle: "preserve-3d",
-                        transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                        transform: isFlipped
+                          ? "rotateY(180deg)"
+                          : "rotateY(0deg)",
                       }}
                     >
                       {/* Tarjeta Frontal */}
@@ -295,7 +367,9 @@ const ViewProducts: React.FC = () => {
                             </dd>
                           </div>
                           <div>
-                            <dt className="font-medium text-gray-500">Unidad</dt>
+                            <dt className="font-medium text-gray-500">
+                              Unidad
+                            </dt>
                             <dd className="text-gray-800">
                               {product.unidadMedida}
                             </dd>
@@ -308,10 +382,7 @@ const ViewProducts: React.FC = () => {
                               ${product.precioUnitario?.toFixed(2)}
                             </dd>
                           </div>
-                          <div>
-                            <dt className="font-medium text-gray-500">IVA</dt>
-                            <dd className="text-gray-800">{product.iva}</dd>
-                          </div>
+
                           <div>
                             <dt className="font-medium text-gray-500">
                               Precio + IVA
@@ -325,7 +396,7 @@ const ViewProducts: React.FC = () => {
                               Precio de Venta
                             </dt>
                             <dd className="text-2xl font-bold text-green-600">
-                              ${product.precioVenta?.toFixed(0)}
+                              ${product.precioVenta.toFixed(0)}
                             </dd>
                           </div>
                         </dl>
@@ -345,14 +416,14 @@ const ViewProducts: React.FC = () => {
 
                       {/* Tarjeta Trasera */}
                       <div
-                        className="absolute inset-0 bg-white shadow rounded-lg p-5 border border-gray-200 flex items-center justify-center"
+                        className="absolute inset-0 bg-white shadow rounded-lg p-5 border border-gray-200 flex flex-col items-center justify-center"
                         style={{
                           backfaceVisibility: "hidden",
                           WebkitBackfaceVisibility: "hidden",
                           transform: "rotateY(180deg)",
                         }}
                       >
-                        <div className="text-center">
+                        <div className="text-center flex flex-col items-center justify-center flex-grow">
                           {product.imagenUrl ? (
                             <img
                               src={product.imagenUrl}
@@ -361,12 +432,36 @@ const ViewProducts: React.FC = () => {
                             />
                           ) : (
                             <div className="border-2 border-dashed border-gray-300 rounded-md w-32 h-32 mx-auto flex items-center justify-center text-gray-500">
-                              Sin Imagen
+                              {/* Botón "+" para agregar imagen */}
+                              {!uploadingImageId && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    takePhotoAndUpdateImage(product.id);
+                                  }}
+                                  className="mt-4 text-2xl bg-indigo-600 hover:bg-indigo-700 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md"
+                                  title="Agregar imagen"
+                                >
+                                  +
+                                </button>
+                              )}
                             </div>
                           )}
-                          <p className="mt-2 text-gray-500 text-sm">
-                            Imagen del Producto
-                          </p>
+
+                          {uploadingImageId === product.id && (
+                            <p className="text-xs text-indigo-600 mt-2">
+                              Subiendo imagen...
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="mt-3">
+                          <dt className="font-medium text-gray-500">
+                            Precio de Venta
+                          </dt>
+                          <dd className="text-2xl font-bold text-green-600">
+                            ${product.precioVenta.toFixed(0)}
+                          </dd>
                         </div>
                       </div>
                     </div>
@@ -377,6 +472,10 @@ const ViewProducts: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Elementos ocultos para la cámara */}
+      <video ref={videoRef} style={{ display: "none" }} />
+      <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
   );
 };
